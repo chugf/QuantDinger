@@ -159,21 +159,21 @@ def run_backtest():
         # 根据周期设置不同的时间限制
         if timeframe == '1m':
             max_days = 30  # 1分钟K线最多1个月
-            max_range_text = '1个月'
+            max_range_text = '1 month'
         elif timeframe == '5m':
             max_days = 180  # 5分钟K线最多6个月
-            max_range_text = '6个月'
+            max_range_text = '6 months'
         elif timeframe in ['15m', '30m']:
             max_days = 365  # 15分钟和30分钟K线最多1年
-            max_range_text = '1年'
+            max_range_text = '1 year'
         else:  # 1H, 4H, 1D, 1W
             max_days = 1095  # 1小时及以上最多3年
-            max_range_text = '3年'
+            max_range_text = '3 years'
         
         if days_diff > max_days:
             return jsonify({
                 'code': 0,
-                'msg': f'回测时间范围超出限制：{timeframe}周期最多可回测{max_range_text}（{max_days}天），当前选择了{days_diff}天',
+                'msg': f'Backtest range exceeds limit: timeframe {timeframe} supports up to {max_range_text} ({max_days} days), but you selected {days_diff} days',
                 'data': None
             }), 400
         

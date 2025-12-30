@@ -45,7 +45,7 @@ def get_kline():
         if not symbol:
             return jsonify({
                 'code': 0,
-                'msg': '缺少交易标的参数',
+                'msg': 'Missing symbol parameter',
                 'data': None
             }), 400
         
@@ -62,7 +62,7 @@ def get_kline():
         if not klines:
             return jsonify({
                 'code': 0,
-                'msg': '未获取到数据',
+                'msg': 'No data found',
                 'data': []
             })
         
@@ -77,7 +77,7 @@ def get_kline():
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'获取K线数据失败: {str(e)}',
+            'msg': f'Failed to fetch kline data: {str(e)}',
             'data': None
         }), 500
 
@@ -92,7 +92,7 @@ def get_price():
         if not symbol:
             return jsonify({
                 'code': 0,
-                'msg': '缺少交易标的参数',
+                'msg': 'Missing symbol parameter',
                 'data': None
             }), 400
         
@@ -101,7 +101,7 @@ def get_price():
         if not price_data:
             return jsonify({
                 'code': 0,
-                'msg': '未获取到价格数据',
+                'msg': 'No price data found',
                 'data': None
             })
         
@@ -115,7 +115,7 @@ def get_price():
         logger.error(f"Failed to fetch price: {str(e)}")
         return jsonify({
             'code': 0,
-            'msg': f'获取价格失败: {str(e)}',
+            'msg': f'Failed to fetch price: {str(e)}',
             'data': None
         }), 500
 

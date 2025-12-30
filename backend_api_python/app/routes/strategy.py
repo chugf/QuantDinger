@@ -48,10 +48,10 @@ def get_strategy_detail():
     try:
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
-            return jsonify({'code': 0, 'msg': '缺少策略ID参数', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': None}), 400
         st = get_strategy_service().get_strategy(strategy_id)
         if not st:
-            return jsonify({'code': 0, 'msg': '策略不存在', 'data': None}), 404
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
         return jsonify({'code': 1, 'msg': 'success', 'data': st})
     except Exception as e:
         logger.error(f"get_strategy_detail failed: {str(e)}")
@@ -79,11 +79,11 @@ def update_strategy():
     try:
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
-            return jsonify({'code': 0, 'msg': '缺少策略ID参数', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': None}), 400
         payload = request.get_json() or {}
         ok = get_strategy_service().update_strategy(strategy_id, payload)
         if not ok:
-            return jsonify({'code': 0, 'msg': '策略不存在', 'data': None}), 404
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
         return jsonify({'code': 1, 'msg': 'success', 'data': None})
     except Exception as e:
         logger.error(f"update_strategy failed: {str(e)}")
@@ -96,7 +96,7 @@ def delete_strategy():
     try:
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
-            return jsonify({'code': 0, 'msg': '缺少策略ID参数', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': None}), 400
         ok = get_strategy_service().delete_strategy(strategy_id)
         return jsonify({'code': 1 if ok else 0, 'msg': 'success' if ok else 'failed', 'data': None})
     except Exception as e:
@@ -111,7 +111,7 @@ def get_trades():
     try:
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
-            return jsonify({'code': 0, 'msg': '缺少策略ID参数', 'data': {'trades': [], 'items': []}}), 400
+            return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': {'trades': [], 'items': []}}), 400
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -139,7 +139,7 @@ def get_positions():
     try:
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
-            return jsonify({'code': 0, 'msg': '缺少策略ID参数', 'data': {'positions': [], 'items': []}}), 400
+            return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': {'positions': [], 'items': []}}), 400
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -240,7 +240,7 @@ def get_equity_curve():
     try:
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
-            return jsonify({'code': 0, 'msg': '缺少策略ID参数', 'data': []}), 400
+            return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': []}), 400
 
         st = get_strategy_service().get_strategy(strategy_id) or {}
         initial = float(st.get('initial_capital') or (st.get('trading_config') or {}).get('initial_capital') or 0)
@@ -295,7 +295,7 @@ def stop_strategy():
         if not strategy_id:
             return jsonify({
                 'code': 0,
-                'msg': '缺少策略ID参数',
+                'msg': 'Missing strategy id parameter',
                 'data': None
             }), 400
         
@@ -304,7 +304,7 @@ def stop_strategy():
         
         # Local backend: AI strategy executor was removed. Only indicator strategies are supported.
         if strategy_type == 'PromptBasedStrategy':
-            return jsonify({'code': 0, 'msg': 'AI策略已移除，本地版不支持启动/停止 AI 策略', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'AI strategy has been removed; local edition does not support starting/stopping AI strategies', 'data': None}), 400
 
         # 指标策略
         get_trading_executor().stop_strategy(strategy_id)
@@ -314,7 +314,7 @@ def stop_strategy():
         
         return jsonify({
             'code': 1,
-            'msg': '停止成功',
+            'msg': 'Stopped successfully',
             'data': None
         })
         
@@ -323,7 +323,7 @@ def stop_strategy():
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'停止策略失败: {str(e)}',
+            'msg': f'Failed to stop strategy: {str(e)}',
             'data': None
         }), 500
 
@@ -342,7 +342,7 @@ def start_strategy():
         if not strategy_id:
             return jsonify({
                 'code': 0,
-                'msg': '缺少策略ID参数',
+                'msg': 'Missing strategy id parameter',
                 'data': None
             }), 400
         
@@ -354,7 +354,7 @@ def start_strategy():
         
         # Local backend: AI strategy executor was removed. Only indicator strategies are supported.
         if strategy_type == 'PromptBasedStrategy':
-            return jsonify({'code': 0, 'msg': 'AI策略已移除，本地版不支持启动 AI 策略', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'AI strategy has been removed; local edition does not support starting AI strategies', 'data': None}), 400
 
         # 指标策略
         success = get_trading_executor().start_strategy(strategy_id)
@@ -364,13 +364,13 @@ def start_strategy():
             get_strategy_service().update_strategy_status(strategy_id, 'stopped')
             return jsonify({
                 'code': 0,
-                'msg': '启动策略执行器失败',
+                'msg': 'Failed to start strategy executor',
                 'data': None
             }), 500
         
         return jsonify({
             'code': 1,
-            'msg': '启动成功',
+            'msg': 'Started successfully',
             'data': None
         })
         
@@ -379,7 +379,7 @@ def start_strategy():
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'启动策略失败: {str(e)}',
+            'msg': f'Failed to start strategy: {str(e)}',
             'data': None
         }), 500
 
@@ -413,11 +413,11 @@ def test_connection():
         if not isinstance(exchange_config, dict):
             logger.error(f"Invalid exchange_config type: {type(exchange_config)}, data: {str(exchange_config)[:200]}")
             # Frontend expects HTTP 200 with {code:0} for business failures.
-            return jsonify({'code': 0, 'msg': '交易所配置格式错误，请检查数据格式', 'data': None})
+            return jsonify({'code': 0, 'msg': 'Invalid exchange config format; please check your payload', 'data': None})
         
         # 验证必要字段
         if not exchange_config.get('exchange_id'):
-            return jsonify({'code': 0, 'msg': '请选择交易所', 'data': None})
+            return jsonify({'code': 0, 'msg': 'Please select an exchange', 'data': None})
         
         api_key = exchange_config.get('api_key', '')
         secret_key = exchange_config.get('secret_key', '')
@@ -434,21 +434,21 @@ def test_connection():
             logger.warning("Secret key contains leading/trailing whitespace")
             
         if not api_key or not secret_key:
-            return jsonify({'code': 0, 'msg': '请填写API密钥和Secret密钥', 'data': None})
+            return jsonify({'code': 0, 'msg': 'Please provide API key and secret key', 'data': None})
         
         result = get_strategy_service().test_exchange_connection(exchange_config)
         
         if result['success']:
-            return jsonify({'code': 1, 'msg': result.get('message') or '连接成功', 'data': result.get('data')})
+            return jsonify({'code': 1, 'msg': result.get('message') or 'Connection successful', 'data': result.get('data')})
         # Always return HTTP 200 for business-level failures.
-        return jsonify({'code': 0, 'msg': result.get('message') or '连接失败', 'data': result.get('data')})
+        return jsonify({'code': 0, 'msg': result.get('message') or 'Connection failed', 'data': result.get('data')})
         
     except Exception as e:
         logger.error(f"Connection test failed: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'测试连接失败: {str(e)}',
+            'msg': f'Connection test failed: {str(e)}',
             'data': None
         }), 500
 
@@ -489,7 +489,7 @@ def get_symbols():
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'获取交易对失败: {str(e)}',
+            'msg': f'Failed to fetch symbols: {str(e)}',
             'data': {
                 'symbols': []
             }

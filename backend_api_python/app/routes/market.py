@@ -375,7 +375,7 @@ def get_watchlist_prices():
         if not data:
             return jsonify({
                 'code': 0,
-                'msg': '请求参数不能为空',
+                'msg': 'Request body is required',
                 'data': []
             }), 400
         
@@ -384,7 +384,7 @@ def get_watchlist_prices():
         if not watchlist or not isinstance(watchlist, list):
             return jsonify({
                 'code': 0,
-                'msg': 'watchlist参数格式错误',
+                'msg': 'Invalid watchlist format',
                 'data': []
             }), 400
         
@@ -432,7 +432,7 @@ def get_watchlist_prices():
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'获取失败: {str(e)}',
+            'msg': f'Failed: {str(e)}',
             'data': []
         }), 500
 
@@ -453,7 +453,7 @@ def get_price():
         if not market or not symbol:
             return jsonify({
                 'code': 0,
-                'msg': '缺少 market 或 symbol 参数',
+                'msg': 'Missing market or symbol parameter(s)',
                 'data': None
             }), 400
         
@@ -469,7 +469,7 @@ def get_price():
         logger.error(f"Failed to fetch price: {str(e)}")
         return jsonify({
             'code': 0,
-            'msg': f'获取失败: {str(e)}',
+            'msg': f'Failed: {str(e)}',
             'data': None
         }), 500
 
@@ -499,7 +499,7 @@ def get_stock_name():
         if not data:
             return jsonify({
                 'code': 0,
-                'msg': '请求参数不能为空',
+                'msg': 'Request body is required',
                 'data': None
             }), 400
         
@@ -509,7 +509,7 @@ def get_stock_name():
         if not market or not symbol:
             return jsonify({
                 'code': 0,
-                'msg': '缺少 market 或 symbol 参数',
+                'msg': 'Missing market or symbol parameter(s)',
                 'data': None
             }), 400
         
@@ -604,6 +604,6 @@ def get_stock_name():
         logger.error(traceback.format_exc())
         return jsonify({
             'code': 0,
-            'msg': f'获取失败: {str(e)}',
+            'msg': f'Failed: {str(e)}',
             'data': None
         }), 500

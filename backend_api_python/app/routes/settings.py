@@ -277,7 +277,7 @@ def save_settings():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'code': 0, 'msg': '无效的请求数据'})
+            return jsonify({'code': 0, 'msg': 'Invalid request payload'})
         
         # 读取当前配置
         current_env = read_env_file()
@@ -310,18 +310,18 @@ def save_settings():
             
             return jsonify({
                 'code': 1,
-                'msg': '配置保存成功',
+                'msg': 'Settings saved successfully',
                 'data': {
                     'updated_keys': list(updates.keys()),
                     'requires_restart': True  # 标记需要重启
                 }
             })
         else:
-            return jsonify({'code': 0, 'msg': '保存配置失败'})
+            return jsonify({'code': 0, 'msg': 'Failed to save settings'})
     
     except Exception as e:
         logger.error(f"Failed to save settings: {e}")
-        return jsonify({'code': 0, 'msg': f'保存失败: {str(e)}'})
+        return jsonify({'code': 0, 'msg': f'Save failed: {str(e)}'})
 
 
 @settings_bp.route('/test-connection', methods=['POST'])
@@ -337,27 +337,27 @@ def test_connection():
             llm = LLMService()
             result = llm.test_connection()
             if result:
-                return jsonify({'code': 1, 'msg': 'OpenRouter连接成功'})
+                return jsonify({'code': 1, 'msg': 'OpenRouter connection successful'})
             else:
-                return jsonify({'code': 0, 'msg': 'OpenRouter连接失败'})
+                return jsonify({'code': 0, 'msg': 'OpenRouter connection failed'})
         
         elif service == 'finnhub':
             # 测试 Finnhub 连接
             import requests
             api_key = data.get('api_key') or os.getenv('FINNHUB_API_KEY')
             if not api_key:
-                return jsonify({'code': 0, 'msg': 'API Key未配置'})
+                return jsonify({'code': 0, 'msg': 'API key is not configured'})
             resp = requests.get(
                 f'https://finnhub.io/api/v1/quote?symbol=AAPL&token={api_key}',
                 timeout=10
             )
             if resp.status_code == 200:
-                return jsonify({'code': 1, 'msg': 'Finnhub连接成功'})
+                return jsonify({'code': 1, 'msg': 'Finnhub connection successful'})
             else:
-                return jsonify({'code': 0, 'msg': f'Finnhub连接失败: {resp.status_code}'})
+                return jsonify({'code': 0, 'msg': f'Finnhub connection failed: {resp.status_code}'})
         
-        return jsonify({'code': 0, 'msg': '未知服务'})
+        return jsonify({'code': 0, 'msg': 'Unknown service'})
     
     except Exception as e:
         logger.error(f"Connection test failed: {e}")
-        return jsonify({'code': 0, 'msg': f'测试失败: {str(e)}'})
+        return jsonify({'code': 0, 'msg': f'Test failed: {str(e)}'})
