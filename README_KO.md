@@ -14,6 +14,10 @@
 
   <h1 align="center">QuantDinger</h1>
 
+  <h3 align="center">
+    ⚡ 5분 만에 시작하는 나만의 로컬 TradingView + AI 퀀트 리서치 랩
+  </h3>
+
   <p align="center">
     <strong>🤖 AI 네이티브 · 🔒 프라이버시 우선 · 🚀 올인원 퀀트 워크스페이스</strong>
   </p>

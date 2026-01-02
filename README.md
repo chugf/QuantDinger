@@ -14,6 +14,10 @@
   </div>
   <br/>
 
+  <h3 align="center">
+    ⚡ Run your own local TradingView + AI quant research lab in 5 minutes.
+  </h3>
+
   <p align="center">
     <strong>🤖 AI-Native · 🔒 Privacy-First · 🚀 All-in-One Quant Workspace</strong>
   </p>

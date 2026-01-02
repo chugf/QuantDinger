@@ -14,6 +14,10 @@
 
   <h1 align="center">QuantDinger</h1>
 
+  <h3 align="center">
+    ⚡ 5 分钟启动你自己的本地 TradingView + AI 量化投研实验室
+  </h3>
+
   <p align="center">
     <strong>🤖 AI 原生 · 🔒 隐私优先 · 🚀 全能量化工作台</strong>
   </p>

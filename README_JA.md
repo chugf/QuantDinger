@@ -14,6 +14,10 @@
 
   <h1 align="center">QuantDinger</h1>
 
+  <h3 align="center">
+    ⚡ 5分で立ち上げる、あなただけのローカルTradingView + AIクオンツ研究ラボ
+  </h3>
+
   <p align="center">
     <strong>🤖 AIネイティブ · 🔒 プライバシー重視 · 🚀 オールインワン定量的ワークスペース</strong>
   </p>
