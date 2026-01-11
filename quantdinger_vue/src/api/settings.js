@@ -44,3 +44,13 @@ export function testConnection (service, params = {}) {
     data: { service, ...params }
   })
 }
+
+/**
+ * 查询 OpenRouter 账户余额
+ */
+export function getOpenRouterBalance () {
+  return request({
+    url: '/api/settings/openrouter-balance',
+    method: 'get'
+  })
+}

@@ -877,6 +877,82 @@ def save_settings():
         return jsonify({'code': 0, 'msg': f'Save failed: {str(e)}'})
 
 
+@settings_bp.route('/openrouter-balance', methods=['GET'])
+def get_openrouter_balance():
+    """查询 OpenRouter 账户余额"""
+    try:
+        import requests
+        from app.config.api_keys import APIKeys
+        
+        api_key = APIKeys.OPENROUTER_API_KEY
+        if not api_key:
+            return jsonify({
+                'code': 0, 
+                'msg': 'OpenRouter API Key 未配置',
+                'data': None
+            })
+        
+        # 调用 OpenRouter API 查询余额
+        # https://openrouter.ai/docs#limits
+        resp = requests.get(
+            'https://openrouter.ai/api/v1/auth/key',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            timeout=10
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            # OpenRouter 返回格式: {"data": {"label": "...", "usage": 0.0, "limit": null, ...}}
+            key_data = data.get('data', {})
+            usage = key_data.get('usage', 0)  # 已使用金额
+            limit = key_data.get('limit')  # 限额（可能为null表示无限制）
+            limit_remaining = key_data.get('limit_remaining')  # 剩余额度
+            is_free_tier = key_data.get('is_free_tier', False)
+            rate_limit = key_data.get('rate_limit', {})
+            
+            return jsonify({
+                'code': 1,
+                'msg': 'success',
+                'data': {
+                    'usage': round(usage, 4),  # 已使用（美元）
+                    'limit': limit,  # 总限额
+                    'limit_remaining': round(limit_remaining, 4) if limit_remaining is not None else None,  # 剩余额度
+                    'is_free_tier': is_free_tier,
+                    'rate_limit': rate_limit,
+                    'label': key_data.get('label', '')
+                }
+            })
+        elif resp.status_code == 401:
+            return jsonify({
+                'code': 0,
+                'msg': 'API Key 无效或已过期',
+                'data': None
+            })
+        else:
+            return jsonify({
+                'code': 0,
+                'msg': f'查询失败: HTTP {resp.status_code}',
+                'data': None
+            })
+            
+    except requests.exceptions.Timeout:
+        return jsonify({
+            'code': 0,
+            'msg': '请求超时，请检查网络连接',
+            'data': None
+        })
+    except Exception as e:
+        logger.error(f"Get OpenRouter balance failed: {e}")
+        return jsonify({
+            'code': 0,
+            'msg': f'查询失败: {str(e)}',
+            'data': None
+        })
+
+
 @settings_bp.route('/test-connection', methods=['POST'])
 def test_connection():
     """测试API连接"""

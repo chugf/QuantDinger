@@ -82,6 +82,46 @@ def _normalize_lang(lang: str | None) -> str:
     return l2 if l2 in supported else "zh-CN"
 
 
+@backtest_bp.route('/backtest/precision-info', methods=['POST'])
+def get_precision_info():
+    """
+    获取回测精度信息（用于前端提示）
+    
+    Params:
+        market: 市场类型
+        startDate: 开始日期 (YYYY-MM-DD)
+        endDate: 结束日期 (YYYY-MM-DD)
+        
+    Returns:
+        精度信息，包含推荐的执行时间框架和预估K线数量
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'code': 0, 'msg': 'Request body is required'}), 400
+        
+        market = data.get('market', 'crypto')
+        start_date_str = data.get('startDate', '')
+        end_date_str = data.get('endDate', '')
+        
+        if not start_date_str or not end_date_str:
+            return jsonify({'code': 0, 'msg': 'startDate and endDate are required'}), 400
+        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        
+        exec_tf, precision_info = backtest_service.get_execution_timeframe(start_date, end_date, market)
+        
+        return jsonify({
+            'code': 1,
+            'msg': 'success',
+            'data': precision_info
+        })
+    except Exception as e:
+        logger.error(f"Get precision info failed: {e}")
+        return jsonify({'code': 0, 'msg': str(e)}), 400
+
+
 @backtest_bp.route('/backtest', methods=['POST'])
 def run_backtest():
     """
@@ -97,6 +137,7 @@ def run_backtest():
         endDate: End date (YYYY-MM-DD)
         initialCapital: Initial capital (default 10000)
         commission: Commission rate (default 0.001)
+        enableMtf: Enable multi-timeframe backtest (default true, only for crypto)
     """
     try:
         data = request.get_json()
@@ -122,6 +163,10 @@ def run_backtest():
         leverage = int(data.get('leverage', 1))
         trade_direction = data.get('tradeDirection', 'long')  # long, short, both
         strategy_config = data.get('strategyConfig') or {}
+        # 多时间框架回测开关（默认开启，仅加密货币市场有效）
+        enable_mtf = data.get('enableMtf', True)
+        if isinstance(enable_mtf, str):
+            enable_mtf = enable_mtf.lower() in ['true', '1', 'yes']
         
         # (Debug) log received params if needed
         
@@ -178,21 +223,46 @@ def run_backtest():
             }), 400
         
         
-        # 执行回测
-        result = backtest_service.run(
-            indicator_code=indicator_code,
-            market=market,
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            initial_capital=initial_capital,
-            commission=commission,
-            slippage=slippage,
-            leverage=leverage,
-            trade_direction=trade_direction,
-            strategy_config=strategy_config
-        )
+        # 执行回测（支持多时间框架高精度回测）
+        # 加密货币市场且启用MTF时，使用多时间框架回测
+        if enable_mtf and market.lower() in ['crypto', 'cryptocurrency']:
+            result = backtest_service.run_multi_timeframe(
+                indicator_code=indicator_code,
+                market=market,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                commission=commission,
+                slippage=slippage,
+                leverage=leverage,
+                trade_direction=trade_direction,
+                strategy_config=strategy_config,
+                enable_mtf=True
+            )
+        else:
+            result = backtest_service.run(
+                indicator_code=indicator_code,
+                market=market,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                commission=commission,
+                slippage=slippage,
+                leverage=leverage,
+                trade_direction=trade_direction,
+                strategy_config=strategy_config
+            )
+            # 添加标准回测的精度信息
+            result['precision_info'] = {
+                'enabled': False,
+                'timeframe': timeframe,
+                'precision': 'standard',
+                'message': '使用标准K线回测'
+            }
 
         # Persist backtest run for AI optimization / history
         run_id = None

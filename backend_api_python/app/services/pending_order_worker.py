@@ -202,7 +202,7 @@ class PendingOrderWorker:
                             # instId: BTC-USDT-SWAP -> BTC/USDT
                             hb_sym = inst_id.replace("-SWAP", "").replace("-", "/")
                             side = "long" if pos_side == "long" else ("short" if pos_side == "short" else ("long" if pos > 0 else "short"))
-                            # IMPORTANT: OKX swap positions `pos` is in contracts (张数), but our system uses base-asset quantity.
+                            # IMPORTANT: OKX swap positions `pos` is in contracts, but our system uses base-asset quantity.
                             # Convert contracts -> base using ctVal when available.
                             qty_base = abs(float(pos))
                             try:

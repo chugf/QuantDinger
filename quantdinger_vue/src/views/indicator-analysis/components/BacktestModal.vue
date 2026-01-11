@@ -309,12 +309,61 @@
 
           <!-- Step 2: trading settings -->
           <div v-show="currentStep === 1">
+            <!-- 合并的信息提示：交易对信息 + 精度信息 -->
             <a-alert
-              type="info"
+              :type="combinedAlertType"
               show-icon
               style="margin-bottom: 12px;"
-              :message="$t('dashboard.indicator.backtest.metaLine', { symbol: symbol || '-', market: market || '-', timeframe: timeframe || '-' })"
-            />
+            >
+              <template slot="message">
+                <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                  <!-- 基本信息 -->
+                  <span>
+                    <strong>Symbol:</strong> {{ symbol || '-' }}
+                    <span style="color: #999; margin: 0 6px;">|</span>
+                    <strong>Market:</strong> {{ market || '-' }}
+                    <span style="color: #999; margin: 0 6px;">|</span>
+                    <strong>Timeframe:</strong> {{ selectedTimeframe || timeframe || '-' }}
+                  </span>
+                  <!-- 精度信息 -->
+                  <span v-if="precisionInfo && precisionInfo.enabled" style="margin-left: 12px; border-left: 1px solid #d9d9d9; padding-left: 12px;">
+                    <a-icon :type="precisionInfo.precision === 'high' ? 'thunderbolt' : 'clock-circle'" style="margin-right: 4px;" />
+                    {{ $t('dashboard.indicator.backtest.precisionMode') }}:
+                    <a-tag :color="precisionInfo.precision === 'high' ? 'green' : 'blue'" size="small" style="margin-left: 4px;">
+                      {{ precisionInfo.timeframe }}
+                    </a-tag>
+                    <span style="color: #666; margin-left: 6px;">
+                      ({{ $t('dashboard.indicator.backtest.estimatedCandles', { count: precisionInfo.estimated_candles ? precisionInfo.estimated_candles.toLocaleString() : '-' }) }})
+                    </span>
+                  </span>
+                  <span v-else-if="precisionInfo && !precisionInfo.enabled && market && market.toLowerCase() === 'crypto'" style="margin-left: 12px; border-left: 1px solid #d9d9d9; padding-left: 12px; color: #faad14;">
+                    <a-icon type="warning" style="margin-right: 4px;" />
+                    {{ $t('dashboard.indicator.backtest.standardModeWarning') }}
+                  </span>
+                </div>
+              </template>
+              <template slot="description">
+                <span v-if="precisionInfo && precisionInfo.enabled" style="font-size: 12px; color: #888;">
+                  {{ precisionInfo.precision === 'high' ? $t('dashboard.indicator.backtest.highPrecisionDesc') : $t('dashboard.indicator.backtest.mediumPrecisionDesc') }}
+                </span>
+                <span v-else-if="precisionInfo && !precisionInfo.enabled && market && market.toLowerCase() === 'crypto'" style="font-size: 12px; color: #888;">
+                  {{ precisionInfo.message || $t('dashboard.indicator.backtest.standardModeDesc') }}
+                </span>
+              </template>
+            </a-alert>
+
+            <!-- 快捷日期选择按钮 -->
+            <div class="date-quick-select" style="margin-bottom: 12px;">
+              <span style="margin-right: 8px; color: #666; font-size: 13px;">{{ $t('dashboard.indicator.backtest.quickSelect') || '快速选择' }}:</span>
+              <a-button-group size="small">
+                <a-button
+                  v-for="preset in datePresets"
+                  :key="preset.key"
+                  :type="selectedDatePreset === preset.key ? 'primary' : 'default'"
+                  @click="applyDatePreset(preset)"
+                >{{ preset.label }}</a-button>
+              </a-button-group>
+            </div>
 
             <a-row :gutter="24">
               <a-col :span="12">
@@ -324,6 +373,7 @@
                     style="width: 100%"
                     :disabled-date="disabledStartDate"
                     :placeholder="$t('dashboard.indicator.backtest.selectStartDate')"
+                    @change="onDateChange"
                   />
                 </a-form-item>
               </a-col>
@@ -334,6 +384,7 @@
                     style="width: 100%"
                     :disabled-date="disabledEndDate"
                     :placeholder="$t('dashboard.indicator.backtest.selectEndDate')"
+                    @change="onDateChange"
                   />
                 </a-form-item>
               </a-col>
@@ -413,7 +464,24 @@
                   </a-select>
                 </a-form-item>
               </a-col>
-              <a-col :span="12"></a-col>
+              <a-col :span="12">
+                <a-form-item :label="$t('dashboard.indicator.backtest.timeframe')">
+                  <a-select
+                    v-model="selectedTimeframe"
+                    style="width: 100%"
+                    @change="onTimeframeChange"
+                  >
+                    <a-select-option value="1m">1m</a-select-option>
+                    <a-select-option value="5m">5m</a-select-option>
+                    <a-select-option value="15m">15m</a-select-option>
+                    <a-select-option value="30m">30m</a-select-option>
+                    <a-select-option value="1H">1H</a-select-option>
+                    <a-select-option value="4H">4H</a-select-option>
+                    <a-select-option value="1D">1D</a-select-option>
+                    <a-select-option value="1W">1W</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
             </a-row>
           </div>
         </a-form>
@@ -501,12 +569,21 @@
         </div>
       </div>
 
-      <!-- 加载状态 -->
+      <!-- 加载状态 - 增强版动画 -->
       <div v-if="loading" class="loading-overlay">
-        <a-spin size="large">
-          <a-icon slot="indicator" type="loading" style="font-size: 32px; color: #1890ff" spin />
-        </a-spin>
-        <div class="loading-text">{{ $t('dashboard.indicator.backtest.running') }}</div>
+        <div class="loading-content">
+          <div class="loading-animation">
+            <div class="chart-bars">
+              <div class="bar bar1"></div>
+              <div class="bar bar2"></div>
+              <div class="bar bar3"></div>
+              <div class="bar bar4"></div>
+              <div class="bar bar5"></div>
+            </div>
+          </div>
+          <div class="loading-text">{{ $t('dashboard.indicator.backtest.running') }}</div>
+          <div class="loading-subtext">{{ loadingTip }}</div>
+        </div>
       </div>
     </div>
 
@@ -581,6 +658,8 @@ export default {
     return {
       form: this.$form.createForm(this),
       loading: false,
+      loadingTip: '',
+      loadingTimer: null,
       currentStep: 0,
       hasResult: false,
       backtestRunId: null,
@@ -588,6 +667,9 @@ export default {
       // Step1 UI state (Ant Form getFieldValue is not reactive)
       trailingEnabledUi: false,
       entryPctMaxUi: 100,
+      precisionInfo: null, // 回测精度信息
+      selectedDatePreset: null, // 当前选中的快捷日期
+      selectedTimeframe: '1D', // 用户选择的时间周期（默认使用props传入的值）
       result: {
         totalReturn: 0,
         annualReturn: 0,
@@ -609,26 +691,67 @@ export default {
     // 根据周期计算最大回测时间范围
     maxBacktestRange () {
       // 1分钟线：最多1个月
-      if (this.timeframe === '1m') {
-        return { months: 1, label: '1个月' }
+      const tf = this.selectedTimeframe || this.timeframe || '1D'
+      if (tf === '1m') {
+        return { days: 30, label: '1个月' }
       }
       // 5分钟线：最多6个月
-      if (this.timeframe === '5m') {
-        return { months: 6, label: '6个月' }
+      if (tf === '5m') {
+        return { days: 180, label: '6个月' }
       }
       // 15分钟和30分钟：最多1年
-      if (['15m', '30m'].includes(this.timeframe)) {
-        return { years: 1, label: '1年' }
+      if (['15m', '30m'].includes(tf)) {
+        return { days: 365, label: '1年' }
       }
       // 1小时及以上：最多3年
-      return { years: 3, label: '3年' }
+      return { days: 1095, label: '3年' }
+    },
+    // 根据时间周期推荐的默认日期范围 - 统一默认30天
+    recommendedRange () {
+      return { days: 30, label: '30天', key: '30d' }
+    },
+    // 合并提示框的类型
+    combinedAlertType () {
+      if (this.precisionInfo && this.precisionInfo.enabled) {
+        return this.precisionInfo.precision === 'high' ? 'success' : 'info'
+      }
+      if (this.precisionInfo && !this.precisionInfo.enabled && this.market && this.market.toLowerCase() === 'crypto') {
+        return 'warning'
+      }
+      return 'info'
+    },
+    // 快捷日期选项 - 所有周期都包含30天作为默认选项
+    datePresets () {
+      const presets = []
+      const tf = this.selectedTimeframe || this.timeframe || '1D'
+      // 根据时间周期动态生成合理的快捷选项
+      // 使用国际通用格式：7D, 14D, 30D, 3M, 6M, 1Y
+      if (tf === '1m') {
+        presets.push({ key: '7d', days: 7, label: '7D' })
+        presets.push({ key: '14d', days: 14, label: '14D' })
+        presets.push({ key: '30d', days: 30, label: '30D' })
+      } else if (tf === '5m') {
+        presets.push({ key: '14d', days: 14, label: '14D' })
+        presets.push({ key: '30d', days: 30, label: '30D' })
+        presets.push({ key: '90d', days: 90, label: '3M' })
+        presets.push({ key: '180d', days: 180, label: '6M' })
+      } else if (['15m', '30m'].includes(tf)) {
+        presets.push({ key: '30d', days: 30, label: '30D' })
+        presets.push({ key: '90d', days: 90, label: '3M' })
+        presets.push({ key: '180d', days: 180, label: '6M' })
+        presets.push({ key: '365d', days: 365, label: '1Y' })
+      } else {
+        // 1H, 4H, 1D, 1W
+        presets.push({ key: '30d', days: 30, label: '30D' })
+        presets.push({ key: '90d', days: 90, label: '3M' })
+        presets.push({ key: '180d', days: 180, label: '6M' })
+        presets.push({ key: '365d', days: 365, label: '1Y' })
+      }
+      return presets
     },
     defaultStartDate () {
-      // 默认开始日期：根据周期限制
-      if (this.maxBacktestRange.months) {
-        return moment().subtract(this.maxBacktestRange.months, 'months')
-      }
-      return moment().subtract(1, 'years') // 默认1年
+      // 默认开始日期：使用推荐范围
+      return moment().subtract(this.recommendedRange.days, 'days')
     },
     defaultEndDate () {
       // 默认结束日期：今天
@@ -636,10 +759,7 @@ export default {
     },
     // 最早可选日期
     earliestDate () {
-      if (this.maxBacktestRange.months) {
-        return moment().subtract(this.maxBacktestRange.months, 'months')
-      }
-      return moment().subtract(this.maxBacktestRange.years, 'years')
+      return moment().subtract(this.maxBacktestRange.days, 'days')
     },
     labelCol () {
       // Wider label area in Step 1 to avoid overlap with inputs
@@ -662,6 +782,9 @@ export default {
         this.step1CollapseKeys = ['risk']
         this.trailingEnabledUi = false
         this.entryPctMaxUi = 100
+        this.precisionInfo = null
+        this.selectedDatePreset = null
+        this.selectedTimeframe = this.timeframe || '1D' // 初始化为props传入的时间周期
         this.result = {
           totalReturn: 0,
           annualReturn: 0,
@@ -681,6 +804,10 @@ export default {
             // Sync non-reactive form values into UI state
             this.trailingEnabledUi = !!this.form.getFieldValue('trailingEnabled')
             this.recalcEntryPctMaxUi()
+            // 默认选中30天
+            this.selectedDatePreset = '30d'
+            // 弹窗打开时立即获取精度信息（使用默认日期范围）
+            this.fetchPrecisionInfo()
           }
         })
       } else {
@@ -873,29 +1000,93 @@ export default {
       // 如果已选择开始日期，限制结束日期不能超过开始日期+最大回测范围
       const startDate = this.form.getFieldValue('startDate')
       if (startDate) {
-        const maxDays = this.maxBacktestRange.months
-          ? Math.floor(this.maxBacktestRange.months * 30.44)
-          : (this.maxBacktestRange.years * 365)
+        const maxDays = this.maxBacktestRange.days || 365
         const maxEndDate = moment(startDate).add(maxDays, 'days')
         if (current > maxEndDate.endOf('day')) return true
       }
 
       return false
     },
+    // 应用快捷日期选择
+    applyDatePreset (preset) {
+      this.selectedDatePreset = preset.key
+      const endDate = moment()
+      const startDate = moment().subtract(preset.days, 'days')
+      this.form.setFieldsValue({
+        startDate: startDate,
+        endDate: endDate
+      })
+      // 更新精度信息
+      this.fetchPrecisionInfo(startDate, endDate)
+    },
+    // 获取精度信息
+    async fetchPrecisionInfo (startDate, endDate) {
+      // 如果没有传入日期，尝试从表单获取或使用默认值
+      if (!startDate || !endDate) {
+        startDate = this.form ? this.form.getFieldValue('startDate') : null
+        endDate = this.form ? this.form.getFieldValue('endDate') : null
+      }
+      // 如果还是没有，使用默认值
+      if (!startDate) startDate = this.defaultStartDate
+      if (!endDate) endDate = this.defaultEndDate
+
+      // 仅加密货币市场支持高精度回测
+      if (!this.market || this.market.toLowerCase() !== 'crypto') {
+        this.precisionInfo = {
+          enabled: false,
+          reason: 'only_crypto',
+          message: this.$t('dashboard.indicator.backtest.onlyCryptoSupported')
+        }
+        return
+      }
+
+      try {
+        const response = await request({
+          url: '/api/indicator/backtest/precision-info',
+          method: 'post',
+          data: {
+            market: this.market,
+            startDate: startDate.format('YYYY-MM-DD'),
+            endDate: endDate.format('YYYY-MM-DD')
+          }
+        })
+
+        if (response.code === 1 && response.data) {
+          this.precisionInfo = response.data
+        }
+      } catch (e) {
+        // 静默失败，不影响正常使用
+        this.precisionInfo = null
+      }
+    },
+    // 时间周期变化时重新获取精度信息和更新快捷日期选项
+    onTimeframeChange () {
+      // 重置日期选择为默认30天
+      this.selectedDatePreset = '30d'
+      const endDate = moment()
+      const startDate = moment().subtract(30, 'days')
+      this.form.setFieldsValue({
+        startDate: startDate,
+        endDate: endDate
+      })
+      // 重新获取精度信息
+      this.fetchPrecisionInfo(startDate, endDate)
+    },
+    // 日期变化时获取精度信息
+    onDateChange () {
+      this.selectedDatePreset = null // 清除快捷选择状态
+      this.$nextTick(() => {
+        this.fetchPrecisionInfo()
+      })
+    },
     // 验证日期范围
     validateDateRange (startDate, endDate) {
       if (!startDate || !endDate) return true
       const diffDays = endDate.diff(startDate, 'days')
-      let maxDays = 0
-      if (this.maxBacktestRange.months) {
-        // 对于月份限制，使用实际月份天数（约30.44天/月）
-        maxDays = Math.floor(this.maxBacktestRange.months * 30.44)
-      } else if (this.maxBacktestRange.years) {
-        maxDays = this.maxBacktestRange.years * 365
-      }
+      const maxDays = this.maxBacktestRange.days || 365
       if (diffDays > maxDays) {
         this.$message.error(this.$t('dashboard.indicator.backtest.dateRangeExceededDays', {
-          timeframe: this.timeframe,
+          timeframe: this.selectedTimeframe || this.timeframe,
           maxRange: this.maxBacktestRange.label,
           maxDays
         }))
@@ -941,6 +1132,29 @@ export default {
       this.hasResult = false
       this.backtestRunId = null
     },
+    // 加载动画提示轮播
+    startLoadingAnimation () {
+      const tips = [
+        this.$t('dashboard.indicator.backtest.loadingTip1') || '正在获取历史K线数据...',
+        this.$t('dashboard.indicator.backtest.loadingTip2') || '正在执行策略信号计算...',
+        this.$t('dashboard.indicator.backtest.loadingTip3') || '正在模拟交易执行...',
+        this.$t('dashboard.indicator.backtest.loadingTip4') || '正在计算回测指标...',
+        this.$t('dashboard.indicator.backtest.loadingTip5') || '即将完成，请稍候...'
+      ]
+      let idx = 0
+      this.loadingTip = tips[0]
+      this.loadingTimer = setInterval(() => {
+        idx = (idx + 1) % tips.length
+        this.loadingTip = tips[idx]
+      }, 2000)
+    },
+    stopLoadingAnimation () {
+      if (this.loadingTimer) {
+        clearInterval(this.loadingTimer)
+        this.loadingTimer = null
+      }
+      this.loadingTip = ''
+    },
     async handleRunBacktest () {
       // Only validate Step 2 fields (dates/capital/fees/etc.)
       const step2Fields = ['startDate', 'endDate', 'initialCapital', 'commission', 'leverage', 'tradeDirection', 'slippage']
@@ -970,6 +1184,7 @@ export default {
 
         this.loading = true
         this.hasResult = false
+        this.startLoadingAnimation()
 
         try {
           const pct = (v) => Number(v || 0) / 100
@@ -1019,16 +1234,18 @@ export default {
             indicatorId: this.indicator.id,
             symbol: this.symbol,
             market: this.market,
-            timeframe: this.timeframe,
+            timeframe: this.selectedTimeframe || this.timeframe,
             startDate: values.startDate.format('YYYY-MM-DD'),
-              endDate: values.endDate.format('YYYY-MM-DD'),
-              initialCapital: values.initialCapital,
-              commission: pct(values.commission || 0),
-              slippage: pct(values.slippage || 0),
-              leverage: values.leverage || 1,
-              tradeDirection: values.tradeDirection || 'long',
-              strategyConfig
-            }
+            endDate: values.endDate.format('YYYY-MM-DD'),
+            initialCapital: values.initialCapital,
+            commission: pct(values.commission || 0),
+            slippage: pct(values.slippage || 0),
+            leverage: values.leverage || 1,
+            tradeDirection: values.tradeDirection || 'long',
+            strategyConfig,
+            // 启用多时间框架高精度回测（加密货币市场）
+            enableMtf: this.market && this.market.toLowerCase() === 'crypto'
+          }
 
           const response = await request({
             url: '/api/indicator/backtest',
@@ -1054,6 +1271,7 @@ export default {
         } catch (error) {
           this.$message.error(this.$t('dashboard.indicator.backtest.failed'))
         } finally {
+          this.stopLoadingAnimation()
           this.loading = false
         }
       })
@@ -1249,6 +1467,22 @@ export default {
   margin-bottom: 24px;
 }
 
+.precision-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.date-quick-select {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+}
+
 .result-section {
   margin-top: 24px;
 }
@@ -1344,6 +1578,7 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 100;
   background: rgba(255, 255, 255, 0.9);
   display: flex;
   flex-direction: column;
@@ -1352,10 +1587,56 @@ export default {
   z-index: 100;
   border-radius: 8px;
 
+  .loading-content {
+    text-align: center;
+  }
+
+  .loading-animation {
+    margin-bottom: 20px;
+  }
+
+  .chart-bars {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    height: 60px;
+    gap: 6px;
+  }
+
+  .bar {
+    width: 8px;
+    background: linear-gradient(180deg, #1890ff 0%, #52c41a 100%);
+    border-radius: 4px;
+    animation: barPulse 1.2s ease-in-out infinite;
+  }
+
+  .bar1 { height: 20px; animation-delay: 0s; }
+  .bar2 { height: 35px; animation-delay: 0.1s; }
+  .bar3 { height: 50px; animation-delay: 0.2s; }
+  .bar4 { height: 35px; animation-delay: 0.3s; }
+  .bar5 { height: 20px; animation-delay: 0.4s; }
+
+  @keyframes barPulse {
+    0%, 100% { transform: scaleY(1); opacity: 0.7; }
+    50% { transform: scaleY(1.5); opacity: 1; }
+  }
+
   .loading-text {
-    margin-top: 16px;
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 500;
     color: #1890ff;
+    margin-bottom: 8px;
+  }
+
+  .loading-subtext {
+    font-size: 13px;
+    color: #666;
+    animation: fadeInOut 2s ease-in-out infinite;
+  }
+
+  @keyframes fadeInOut {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
   }
 }
 </style>

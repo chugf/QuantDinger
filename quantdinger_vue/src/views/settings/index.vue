@@ -36,6 +36,59 @@
               </span>
             </template>
 
+            <!-- AI 组特殊：显示 OpenRouter 余额查询卡片 -->
+            <div v-if="groupKey === 'ai'" class="openrouter-balance-card">
+              <a-card size="small" :bordered="false">
+                <div class="balance-header">
+                  <span class="balance-title">
+                    <a-icon type="wallet" style="margin-right: 6px;" />
+                    {{ $t('settings.openrouterBalance') || 'OpenRouter 账户余额' }}
+                  </span>
+                  <a-button size="small" type="primary" ghost :loading="balanceLoading" @click="queryOpenRouterBalance">
+                    <a-icon type="sync" />
+                    {{ $t('settings.queryBalance') || '查询余额' }}
+                  </a-button>
+                </div>
+                <div v-if="openrouterBalance" class="balance-info">
+                  <a-row :gutter="16">
+                    <a-col :span="8">
+                      <a-statistic
+                        :title="$t('settings.balanceUsage') || '已使用'"
+                        :value="openrouterBalance.usage"
+                        prefix="$"
+                        :precision="4"
+                        :value-style="{ color: '#cf1322' }"
+                      />
+                    </a-col>
+                    <a-col :span="8">
+                      <a-statistic
+                        :title="$t('settings.balanceRemaining') || '剩余额度'"
+                        :value="openrouterBalance.limit_remaining !== null ? openrouterBalance.limit_remaining : '∞'"
+                        :prefix="openrouterBalance.limit_remaining !== null ? '$' : ''"
+                        :precision="openrouterBalance.limit_remaining !== null ? 4 : 0"
+                        :value-style="{ color: openrouterBalance.limit_remaining !== null && openrouterBalance.limit_remaining < 1 ? '#cf1322' : '#3f8600' }"
+                      />
+                    </a-col>
+                    <a-col :span="8">
+                      <a-statistic
+                        :title="$t('settings.balanceLimit') || '总限额'"
+                        :value="openrouterBalance.limit !== null ? openrouterBalance.limit : '∞'"
+                        :prefix="openrouterBalance.limit !== null ? '$' : ''"
+                        :precision="openrouterBalance.limit !== null ? 2 : 0"
+                      />
+                    </a-col>
+                  </a-row>
+                  <div v-if="openrouterBalance.is_free_tier" class="free-tier-badge">
+                    <a-tag color="blue">Free Tier</a-tag>
+                  </div>
+                </div>
+                <div v-else class="balance-empty">
+                  <a-icon type="info-circle" style="margin-right: 6px;" />
+                  {{ $t('settings.balanceNotQueried') || '点击"查询余额"获取账户信息' }}
+                </div>
+              </a-card>
+            </div>
+
             <a-form :form="form" layout="vertical" class="settings-form">
               <a-row :gutter="24">
                 <a-col
@@ -150,7 +203,7 @@
 </template>
 
 <script>
-import { getSettingsSchema, getSettingsValues, saveSettings } from '@/api/settings'
+import { getSettingsSchema, getSettingsValues, saveSettings, getOpenRouterBalance } from '@/api/settings'
 import { baseMixin } from '@/store/app-mixin'
 
 export default {
@@ -164,7 +217,10 @@ export default {
       values: {},
       activeKeys: ['server', 'auth', 'ai', 'trading'],
       passwordVisible: {},
-      showRestartTip: false
+      showRestartTip: false,
+      // OpenRouter 余额
+      balanceLoading: false,
+      openrouterBalance: null
     }
   },
   computed: {
@@ -212,6 +268,24 @@ export default {
         this.$message.error(this.$t('settings.loadFailed'))
       } finally {
         this.loading = false
+      }
+    },
+
+    // 查询 OpenRouter 余额
+    async queryOpenRouterBalance () {
+      this.balanceLoading = true
+      try {
+        const res = await getOpenRouterBalance()
+        if (res.code === 1 && res.data) {
+          this.openrouterBalance = res.data
+          this.$message.success(this.$t('settings.balanceQuerySuccess') || '余额查询成功')
+        } else {
+          this.$message.error(res.msg || this.$t('settings.balanceQueryFailed') || '余额查询失败')
+        }
+      } catch (error) {
+        this.$message.error(this.$t('settings.balanceQueryFailed') || '余额查询失败')
+      } finally {
+        this.balanceLoading = false
       }
     },
 
@@ -398,6 +472,54 @@ export default {
 
   .settings-content {
     margin-bottom: 80px;
+  }
+
+  // OpenRouter 余额查询卡片
+  .openrouter-balance-card {
+    margin-bottom: 20px;
+
+    .ant-card {
+      background: linear-gradient(135deg, #e6f7ff 0%, #f0f5ff 100%);
+      border: 1px solid #91d5ff;
+      border-radius: 8px;
+    }
+
+    .balance-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+
+      .balance-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #1890ff;
+      }
+    }
+
+    .balance-info {
+      padding: 8px 0;
+
+      /deep/ .ant-statistic-title {
+        font-size: 12px;
+        color: #666;
+      }
+
+      /deep/ .ant-statistic-content {
+        font-size: 18px;
+      }
+
+      .free-tier-badge {
+        margin-top: 12px;
+        text-align: right;
+      }
+    }
+
+    .balance-empty {
+      color: #8c8c8c;
+      font-size: 13px;
+      padding: 8px 0;
+    }
   }
 
   .settings-collapse {

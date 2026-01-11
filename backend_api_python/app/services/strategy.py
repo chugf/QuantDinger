@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 class StrategyService:
     """Strategy service."""
     
-    # 类变量：限制连接测试并发数
+    # Class variable: limit connection test concurrency
     _connection_test_semaphore = threading.Semaphore(5)
     
     def __init__(self):
@@ -22,7 +22,7 @@ class StrategyService:
         pass
         
     def get_running_strategies(self) -> List[Dict[str, Any]]:
-        """获取所有运行中的策略（仅ID）"""
+        """Get all running strategies (ID only)"""
         try:
             with get_db_connection() as db:
                 cursor = db.cursor()
@@ -36,13 +36,13 @@ class StrategyService:
             return []
 
     def get_running_strategies_with_type(self) -> List[Dict[str, Any]]:
-        """获取所有运行中的策略（包含类型信息）"""
+        """Get all running strategies (with type info)"""
         try:
             with get_db_connection() as db:
                 cursor = db.cursor()
-                # 假设 qd_strategies_trading 表中有 strategy_type 字段
-                # 如果没有，可能需要关联查询或者根据其他字段判断
-                # 这里假设表结构已更新
+                # Assume qd_strategies_trading table has strategy_type field
+                # If not, may need join query or determine from other fields
+                # Here we assume table structure is updated
                 query = "SELECT id, strategy_type FROM qd_strategies_trading WHERE status = 'running'"
                 cursor.execute(query)
                 results = cursor.fetchall()
@@ -58,14 +58,14 @@ class StrategyService:
     
     def get_exchange_symbols(self, exchange_config: Dict[str, Any]) -> Dict[str, Any]:
         """
-        获取交易所交易对列表 (无需API Key)
+        Get exchange trading pairs (no API Key required)
         """
         try:
             exchange_id = exchange_config.get('exchange_id', '')
             proxies = exchange_config.get('proxies')
             
             if not exchange_id:
-                return {'success': False, 'message': '请选择交易所', 'symbols': []}
+                return {'success': False, 'message': 'Please select an exchange', 'symbols': []}
 
             # For these exchanges, prefer direct REST (no ccxt), aligned with local live-trading design.
             ex = str(exchange_id or "").strip().lower()
@@ -97,7 +97,7 @@ class StrategyService:
                             if sym.endswith("USDT") and len(sym) > 4:
                                 symbols.append(f"{sym[:-4]}/USDT")
                     symbols = sorted(list(set(symbols)))
-                    return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
+                    return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
 
                 if ex in ("coinbaseexchange", "coinbase_exchange"):
                     base = str(exchange_config.get("base_url") or exchange_config.get("baseUrl") or "https://api.exchange.coinbase.com").rstrip("/")
@@ -113,7 +113,7 @@ class StrategyService:
                             if quote_ccy == "USDT" and base_ccy:
                                 symbols.append(f"{base_ccy}/USDT")
                     symbols = sorted(list(set(symbols)))
-                    return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
+                    return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
 
                 if ex == "kraken":
                     if market_type == "spot":
@@ -142,7 +142,7 @@ class StrategyService:
                                 if sym and ("perpetual" in typ or typ.startswith("pf") or sym.startswith("PF_")):
                                     symbols.append(sym)
                     symbols = sorted(list(set(symbols)))
-                    return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
+                    return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
 
                 if ex == "kucoin":
                     if market_type == "spot":
@@ -177,7 +177,7 @@ class StrategyService:
                                 if base_ccy:
                                     symbols.append(f"{base_ccy}/USDT")
                     symbols = sorted(list(set(symbols)))
-                    return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
+                    return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
 
                 if ex == "gate":
                     base = str(exchange_config.get("base_url") or exchange_config.get("baseUrl") or "https://api.gateio.ws").rstrip("/")
@@ -203,7 +203,7 @@ class StrategyService:
                                 if name and name.upper().endswith("_USDT"):
                                     symbols.append(name.replace("_", "/"))
                     symbols = sorted(list(set(symbols)))
-                    return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
+                    return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
 
                 if ex == "bitfinex":
                     j = _req_json("https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange") if market_type == "spot" else _req_json(
@@ -225,19 +225,19 @@ class StrategyService:
                         elif s.endswith("USDT") and len(s) > 4:
                             symbols.append(f"{s[:-4]}/USDT")
                     symbols = sorted(list(set(symbols)))
-                    return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
-                return {'success': True, 'message': '获取成功', 'symbols': symbols}
+                    return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
+                return {'success': True, 'message': 'Success', 'symbols': symbols}
             
             import ccxt
             
-            # 创建交易所实例 (public only)
+            # Create exchange instance (public only)
             exchange_class = getattr(ccxt, exchange_id, None)
             if not exchange_class:
-                return {'success': False, 'message': f'不支持的交易所: {exchange_id}', 'symbols': []}
+                return {'success': False, 'message': f'Unsupported exchange: {exchange_id}', 'symbols': []}
             
             exchange_config_dict = {
                 'enableRateLimit': True,
-                'options': {'defaultType': 'swap'} # 默认为 swap
+                'options': {'defaultType': 'swap'}  # Default to swap
             }
             if proxies:
                 exchange_config_dict['proxies'] = proxies
@@ -251,11 +251,11 @@ class StrategyService:
                     symbols.append(symbol)
             
             symbols.sort()
-            return {'success': True, 'message': f'获取成功，共 {len(symbols)} 个交易对', 'symbols': symbols}
+            return {'success': True, 'message': f'Success, {len(symbols)} trading pairs', 'symbols': symbols}
             
         except Exception as e:
             logger.error(f"Failed to fetch symbols: {str(e)}")
-            return {'success': False, 'message': f'获取交易对失败: {str(e)}', 'symbols': []}
+            return {'success': False, 'message': f'Failed to get trading pairs: {str(e)}', 'symbols': []}
     
     def test_exchange_connection(self, exchange_config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -535,7 +535,7 @@ class StrategyService:
         trading_config = payload.get('trading_config') or {}
         exchange_config = payload.get('exchange_config') or {}
 
-        # 策略组字段
+        # Strategy group fields
         strategy_group_id = payload.get('strategy_group_id') or ''
         group_base_name = payload.get('group_base_name') or ''
 
@@ -588,10 +588,10 @@ class StrategyService:
 
     def batch_create_strategies(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        批量创建策略（多币种）
+        Batch create strategies (multi-symbol)
         
         Args:
-            payload: 包含 symbols（数组）和其他策略配置
+            payload: Contains symbols (array) and other strategy config
             
         Returns:
             {
@@ -609,7 +609,7 @@ class StrategyService:
         if not base_name:
             raise ValueError("strategy_name is required")
         
-        # 生成策略组ID
+        # Generate strategy group ID
         strategy_group_id = str(uuid.uuid4())[:8]
         
         created_ids = []
@@ -617,10 +617,10 @@ class StrategyService:
         
         for symbol in symbols:
             try:
-                # 为每个币种创建单独的策略
+                # Create individual strategy for each symbol
                 single_payload = dict(payload)
                 
-                # 解析 symbol（可能是 "Market:SYMBOL" 格式）
+                # Parse symbol (may be "Market:SYMBOL" format)
                 if isinstance(symbol, str) and ':' in symbol:
                     parts = symbol.split(':', 1)
                     market_category = parts[0]
@@ -629,13 +629,13 @@ class StrategyService:
                     market_category = payload.get('market_category') or 'Crypto'
                     symbol_name = symbol
                 
-                # 策略名称加币种后缀
+                # Strategy name with symbol suffix
                 single_payload['strategy_name'] = f"{base_name}-{symbol_name}"
                 single_payload['strategy_group_id'] = strategy_group_id
                 single_payload['group_base_name'] = base_name
                 single_payload['market_category'] = market_category
                 
-                # 更新 trading_config 中的 symbol
+                # Update symbol in trading_config
                 trading_config = dict(single_payload.get('trading_config') or {})
                 trading_config['symbol'] = symbol_name
                 single_payload['trading_config'] = trading_config
@@ -658,7 +658,7 @@ class StrategyService:
         }
 
     def batch_start_strategies(self, strategy_ids: List[int]) -> Dict[str, Any]:
-        """批量启动策略"""
+        """Batch start strategies"""
         success_ids = []
         failed_ids = []
         
@@ -677,7 +677,7 @@ class StrategyService:
         }
 
     def batch_stop_strategies(self, strategy_ids: List[int]) -> Dict[str, Any]:
-        """批量停止策略"""
+        """Batch stop strategies"""
         success_ids = []
         failed_ids = []
         
@@ -696,7 +696,7 @@ class StrategyService:
         }
 
     def batch_delete_strategies(self, strategy_ids: List[int]) -> Dict[str, Any]:
-        """批量删除策略"""
+        """Batch delete strategies"""
         success_ids = []
         failed_ids = []
         
@@ -715,7 +715,7 @@ class StrategyService:
         }
 
     def get_strategies_by_group(self, strategy_group_id: str) -> List[Dict[str, Any]]:
-        """获取策略组内的所有策略"""
+        """Get all strategies in a group"""
         try:
             with get_db_connection() as db:
                 cur = db.cursor()
