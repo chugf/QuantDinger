@@ -596,6 +596,7 @@ class TradingExecutor:
             if not klines or len(klines) < 2:
                 logger.error(f"Strategy {strategy_id} failed to fetch K-lines")
                 return
+            logger.info(rf'Strategy {strategy_id} kline number: {len(klines)}')
             
             # 转换为DataFrame
             df = self._klines_to_dataframe(klines)
