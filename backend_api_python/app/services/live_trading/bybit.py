@@ -61,11 +61,39 @@ class BybitClient(BaseRestClient):
             return Decimal("0")
 
     @staticmethod
-    def _dec_str(d: Decimal) -> str:
+    def _dec_str(d: Decimal, max_decimals: int = 18) -> str:
+        """
+        Convert Decimal to string with controlled precision.
+        Bybit requires quantities to match qtyStep precision.
+        """
         try:
-            return format(d, "f")
+            if d == 0:
+                return "0"
+            normalized = d.normalize()
+            s = format(normalized, f".{max_decimals}f")
+            if '.' in s:
+                s = s.rstrip('0').rstrip('.')
+            return s if s else "0"
         except Exception:
-            return str(d)
+            try:
+                f = float(d)
+                if f == 0:
+                    return "0"
+                s = format(f, f".{max_decimals}f")
+                if '.' in s:
+                    s = s.rstrip('0').rstrip('.')
+                return s if s else "0"
+            except Exception:
+                s = str(d)
+                if 'e' in s.lower() or 'E' in s:
+                    try:
+                        f = float(s)
+                        s = format(f, f".{max_decimals}f")
+                        if '.' in s:
+                            s = s.rstrip('0').rstrip('.')
+                    except Exception:
+                        pass
+                return s if s else "0"
 
     @staticmethod
     def _floor_to_step(value: Decimal, step: Decimal) -> Decimal:

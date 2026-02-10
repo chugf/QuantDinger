@@ -561,6 +561,18 @@ class TradingExecutor:
             market_category = (strategy.get('market_category') or 'Crypto').strip()
             logger.info(f"Strategy {strategy_id} market_category: {market_category}")
 
+            # Check if this is a cross-sectional strategy
+            cs_strategy_type = trading_config.get('cs_strategy_type', 'single')
+            if cs_strategy_type == 'cross_sectional':
+                # Run cross-sectional strategy loop
+                self._run_cross_sectional_strategy_loop(
+                    strategy_id, strategy, trading_config, indicator_config, 
+                    ai_model_config, execution_mode, notification_config, 
+                    strategy_name, market_category, market_type, leverage, 
+                    initial_capital, indicator_code, indicator_id
+                )
+                return
+
             # 初始化交易所连接（信号模式下无需真实连接）
             exchange = None
             
@@ -2687,3 +2699,348 @@ class TradingExecutor:
                 return result['code'] if result else None
         except:
             return None
+    
+    def _get_all_positions(self, strategy_id: int) -> List[Dict[str, Any]]:
+        """获取策略的所有持仓（截面策略使用）"""
+        try:
+            with get_db_connection() as db:
+                cursor = db.cursor()
+                cursor.execute("""
+                    SELECT id, symbol, side, size, entry_price, current_price, highest_price, lowest_price
+                    FROM qd_strategy_positions
+                    WHERE strategy_id = %s
+                """, (strategy_id,))
+                return cursor.fetchall() or []
+        except Exception as e:
+            logger.error(f"Failed to get all positions: {e}")
+            return []
+    
+    def _should_rebalance(self, strategy_id: int, rebalance_frequency: str) -> bool:
+        """检查是否应该调仓"""
+        try:
+            with get_db_connection() as db:
+                cursor = db.cursor()
+                cursor.execute("""
+                    SELECT last_rebalance_at FROM qd_strategies_trading WHERE id = %s
+                """, (strategy_id,))
+                result = cursor.fetchone()
+                if not result or not result.get('last_rebalance_at'):
+                    return True
+                
+                last_rebalance = result['last_rebalance_at']
+                if isinstance(last_rebalance, str):
+                    from datetime import datetime
+                    last_rebalance = datetime.fromisoformat(last_rebalance.replace('Z', '+00:00'))
+                
+                now = datetime.now()
+                delta = now - last_rebalance
+                
+                if rebalance_frequency == 'daily':
+                    return delta.days >= 1
+                elif rebalance_frequency == 'weekly':
+                    return delta.days >= 7
+                elif rebalance_frequency == 'monthly':
+                    return delta.days >= 30
+                return True
+        except Exception as e:
+            logger.error(f"Failed to check rebalance: {e}")
+            return True
+    
+    def _update_last_rebalance(self, strategy_id: int):
+        """更新上次调仓时间"""
+        try:
+            with get_db_connection() as db:
+                cursor = db.cursor()
+                # Try to update, if column doesn't exist, ignore
+                try:
+                    cursor.execute("""
+                        UPDATE qd_strategies_trading 
+                        SET last_rebalance_at = NOW() 
+                        WHERE id = %s
+                    """, (strategy_id,))
+                    db.commit()
+                except Exception:
+                    # Column may not exist, that's OK
+                    pass
+                cursor.close()
+        except Exception as e:
+            logger.warning(f"Failed to update last_rebalance_at: {e}")
+    
+    def _execute_cross_sectional_indicator(
+        self,
+        indicator_code: str,
+        symbols: List[str],
+        trading_config: Dict[str, Any],
+        market_category: str,
+        timeframe: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        执行截面策略指标，返回所有标的的评分和排序
+        """
+        try:
+            # 获取所有标的的K线数据
+            all_data = {}
+            for symbol in symbols:
+                try:
+                    klines = self._fetch_latest_kline(symbol, timeframe, limit=200, market_category=market_category)
+                    if klines and len(klines) >= 2:
+                        df = self._klines_to_dataframe(klines)
+                        if len(df) > 0:
+                            all_data[symbol] = df
+                except Exception as e:
+                    logger.warning(f"Failed to fetch data for {symbol}: {e}")
+                    continue
+            
+            if not all_data:
+                logger.error("No data available for cross-sectional strategy")
+                return None
+            
+            # 准备执行环境
+            exec_env = {
+                'symbols': list(all_data.keys()),
+                'data': all_data,  # {symbol: df}
+                'scores': {},  # 用于存储评分
+                'rankings': [],  # 用于存储排序
+                'np': np,
+                'pd': pd,
+                'trading_config': trading_config,
+                'config': trading_config,
+            }
+            
+            # 执行指标代码
+            import builtins
+            safe_builtins = {k: getattr(builtins, k) for k in dir(builtins) 
+                           if not k.startswith('_') and k not in [
+                               'eval', 'exec', 'compile', 'open', 'input',
+                               'help', 'exit', 'quit', '__import__',
+                           ]}
+            exec_env['__builtins__'] = safe_builtins
+            
+            pre_import_code = "import numpy as np\nimport pandas as pd\n"
+            exec(pre_import_code, exec_env)
+            exec(indicator_code, exec_env)
+            
+            scores = exec_env.get('scores', {})
+            rankings = exec_env.get('rankings', [])
+            
+            # 如果没有提供rankings，根据scores排序
+            if not rankings and scores:
+                rankings = sorted(scores.keys(), key=lambda x: scores.get(x, 0), reverse=True)
+            
+            return {
+                'scores': scores,
+                'rankings': rankings
+            }
+        except Exception as e:
+            logger.error(f"Failed to execute cross-sectional indicator: {e}")
+            logger.error(traceback.format_exc())
+            return None
+    
+    def _generate_cross_sectional_signals(
+        self,
+        strategy_id: int,
+        rankings: List[str],
+        scores: Dict[str, float],
+        trading_config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        根据排序结果生成截面策略信号
+        """
+        portfolio_size = trading_config.get('portfolio_size', 10)
+        long_ratio = float(trading_config.get('long_ratio', 0.5))
+        
+        # 选择持仓标的
+        long_count = int(portfolio_size * long_ratio)
+        short_count = portfolio_size - long_count
+        
+        long_symbols = set(rankings[:long_count]) if long_count > 0 else set()
+        short_symbols = set(rankings[-short_count:]) if short_count > 0 and len(rankings) >= short_count else set()
+        
+        # 获取当前持仓
+        current_positions = self._get_all_positions(strategy_id)
+        current_long = {p['symbol'] for p in current_positions if p.get('side') == 'long'}
+        current_short = {p['symbol'] for p in current_positions if p.get('side') == 'short'}
+        
+        signals = []
+        
+        # 生成做多信号
+        for symbol in long_symbols:
+            if symbol not in current_long:
+                # 如果当前没有多仓，开多
+                if symbol in current_short:
+                    # 如果当前是空仓，先平空再开多
+                    signals.append({
+                        'symbol': symbol,
+                        'type': 'close_short',
+                        'score': scores.get(symbol, 0)
+                    })
+                signals.append({
+                    'symbol': symbol,
+                    'type': 'open_long',
+                    'score': scores.get(symbol, 0)
+                })
+        
+        # 平掉不在做多列表中的多仓
+        for symbol in current_long:
+            if symbol not in long_symbols:
+                signals.append({
+                    'symbol': symbol,
+                    'type': 'close_long',
+                    'score': scores.get(symbol, 0)
+                })
+        
+        # 生成做空信号
+        for symbol in short_symbols:
+            if symbol not in current_short:
+                # 如果当前没有空仓，开空
+                if symbol in current_long:
+                    # 如果当前是多仓，先平多再开空
+                    signals.append({
+                        'symbol': symbol,
+                        'type': 'close_long',
+                        'score': scores.get(symbol, 0)
+                    })
+                signals.append({
+                    'symbol': symbol,
+                    'type': 'open_short',
+                    'score': scores.get(symbol, 0)
+                })
+        
+        # 平掉不在做空列表中的空仓
+        for symbol in current_short:
+            if symbol not in short_symbols:
+                signals.append({
+                    'symbol': symbol,
+                    'type': 'close_short',
+                    'score': scores.get(symbol, 0)
+                })
+        
+        return signals
+    
+    def _run_cross_sectional_strategy_loop(
+        self,
+        strategy_id: int,
+        strategy: Dict[str, Any],
+        trading_config: Dict[str, Any],
+        indicator_config: Dict[str, Any],
+        ai_model_config: Dict[str, Any],
+        execution_mode: str,
+        notification_config: Dict[str, Any],
+        strategy_name: str,
+        market_category: str,
+        market_type: str,
+        leverage: float,
+        initial_capital: float,
+        indicator_code: str,
+        indicator_id: Optional[int]
+    ):
+        """
+        截面策略执行循环
+        """
+        logger.info(f"Starting cross-sectional strategy loop for strategy {strategy_id}")
+        
+        symbol_list = trading_config.get('symbol_list', [])
+        if not symbol_list:
+            logger.error(f"Strategy {strategy_id} has no symbol_list for cross-sectional strategy")
+            return
+        
+        timeframe = trading_config.get('timeframe', '1H')
+        rebalance_frequency = trading_config.get('rebalance_frequency', 'daily')
+        tick_interval_sec = int(trading_config.get('decide_interval', 300))
+        
+        last_tick_time = 0
+        last_rebalance_time = 0
+        
+        while True:
+            try:
+                # 检查策略状态
+                if not self._is_strategy_running(strategy_id):
+                    logger.info(f"Cross-sectional strategy {strategy_id} stopped")
+                    break
+                
+                current_time = time.time()
+                
+                # Sleep until next tick
+                if last_tick_time > 0:
+                    sleep_sec = (last_tick_time + tick_interval_sec) - current_time
+                    if sleep_sec > 0:
+                        time.sleep(min(sleep_sec, 1.0))
+                        continue
+                last_tick_time = current_time
+                
+                # 检查是否需要调仓
+                if not self._should_rebalance(strategy_id, rebalance_frequency):
+                    continue
+                
+                logger.info(f"Cross-sectional strategy {strategy_id} rebalancing...")
+                
+                # 执行截面指标
+                result = self._execute_cross_sectional_indicator(
+                    indicator_code, symbol_list, trading_config, market_category, timeframe
+                )
+                
+                if not result:
+                    logger.warning(f"Cross-sectional indicator returned no result")
+                    continue
+                
+                # 生成信号
+                signals = self._generate_cross_sectional_signals(
+                    strategy_id, result['rankings'], result['scores'], trading_config
+                )
+                
+                if not signals:
+                    logger.info(f"No rebalancing needed for strategy {strategy_id}")
+                    self._update_last_rebalance(strategy_id)
+                    continue
+                
+                logger.info(f"Generated {len(signals)} signals for cross-sectional strategy {strategy_id}")
+                
+                # 批量执行交易
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                with ThreadPoolExecutor(max_workers=min(10, len(signals))) as executor:
+                    futures = {}
+                    for signal in signals:
+                        future = executor.submit(
+                            self._execute_signal,
+                            strategy_id=strategy_id,
+                            strategy_name=strategy_name,
+                            exchange=None,  # Signal mode
+                            symbol=signal['symbol'],
+                            current_price=0.0,  # Will be fetched in _execute_signal
+                            signal_type=signal['type'],
+                            position_size=None,
+                            current_positions=[],
+                            trade_direction='both',
+                            leverage=leverage,
+                            initial_capital=initial_capital,
+                            market_type=market_type,
+                            market_category=market_category,
+                            margin_mode='cross',
+                            stop_loss_price=None,
+                            take_profit_price=None,
+                            execution_mode=execution_mode,
+                            notification_config=notification_config,
+                            trading_config=trading_config,
+                            ai_model_config=ai_model_config,
+                            signal_ts=int(current_time)
+                        )
+                        futures[future] = signal
+                    
+                    # 等待所有交易完成
+                    for future in as_completed(futures):
+                        signal = futures[future]
+                        try:
+                            result = future.result(timeout=30)
+                            if result:
+                                logger.info(f"Successfully executed signal: {signal['symbol']} {signal['type']}")
+                        except Exception as e:
+                            logger.error(f"Failed to execute signal {signal['symbol']} {signal['type']}: {e}")
+                
+                # 更新调仓时间
+                self._update_last_rebalance(strategy_id)
+                last_rebalance_time = current_time
+                
+            except Exception as e:
+                logger.error(f"Cross-sectional strategy loop error: {e}")
+                logger.error(traceback.format_exc())
+                time.sleep(5)  # Wait before retrying

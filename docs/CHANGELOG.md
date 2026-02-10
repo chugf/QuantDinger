@@ -4,6 +4,79 @@ This document records version updates, new features, bug fixes, and database mig
 
 ---
 
+## V2.1.3 (2026-02-XX)
+
+### 🚀 New Features
+
+#### Cross-Sectional Strategy Support
+- **Multi-Symbol Portfolio Management** - Added support for cross-sectional strategies that manage a portfolio of multiple symbols simultaneously
+  - Strategy type selection: Single Symbol vs Cross-Sectional
+  - Symbol list configuration: Select multiple symbols for portfolio management
+  - Portfolio size: Configure the number of symbols to hold simultaneously
+  - Long/Short ratio: Set the proportion of long vs short positions (0-1)
+  - Rebalance frequency: Daily, Weekly, or Monthly portfolio rebalancing
+  - Indicator execution: Indicators receive a `data` dictionary (symbol -> DataFrame) for cross-symbol analysis
+  - Signal generation: Automatic buy/sell/close signals based on indicator rankings
+  - Parallel execution: Multiple orders executed concurrently for efficiency
+- **Backend Implementation**
+  - Cross-sectional configurations stored in `trading_config` JSON field
+  - New `_run_cross_sectional_strategy_loop` method in TradingExecutor
+  - Automatic rebalancing based on configured frequency
+  - Support for both long and short positions in the same portfolio
+- **Frontend UI**
+  - Strategy type selector in strategy creation/editing form
+  - Conditional display of single-symbol vs cross-sectional configuration fields
+  - Multi-select symbol picker for cross-sectional strategies
+  - Full i18n support (Chinese and English)
+
+See `docs/CROSS_SECTIONAL_STRATEGY_GUIDE_CN.md` or `docs/CROSS_SECTIONAL_STRATEGY_GUIDE_EN.md` for detailed usage instructions.
+
+### 🐛 Bug Fixes
+- Fixed decimal precision issues in exchange order quantities (Binance Spot LOT_SIZE filter errors)
+- Improved `_dec_str` method across all exchange clients for accurate quantity formatting
+- Enhanced quantity normalization to respect exchange precision requirements
+- Fixed validation logic for cross-sectional strategies (now validates correct symbol list field)
+- Fixed success message to show correct strategy count for cross-sectional strategies
+
+### 📋 Database Migration
+
+**Run the following SQL on your PostgreSQL database before deploying V2.1.3:**
+
+```sql
+-- ============================================================
+-- QuantDinger V2.1.3 Database Migration
+-- Cross-Sectional Strategy Support
+-- ============================================================
+
+-- Add last_rebalance_at column to track rebalancing time for cross-sectional strategies
+-- Note: Cross-sectional strategy configurations (symbol_list, portfolio_size, long_ratio, rebalance_frequency)
+-- are stored in the trading_config JSON field, not as separate database columns.
+-- This migration only adds the last_rebalance_at timestamp field which is needed for rebalancing logic.
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'qd_strategies_trading' 
+        AND column_name = 'last_rebalance_at'
+    ) THEN
+        ALTER TABLE qd_strategies_trading 
+        ADD COLUMN last_rebalance_at TIMESTAMP;
+        RAISE NOTICE 'Added last_rebalance_at column to qd_strategies_trading';
+    ELSE
+        RAISE NOTICE 'Column last_rebalance_at already exists';
+    END IF;
+END $$;
+```
+
+**Migration Notes:**
+- This migration is safe to run multiple times (uses IF NOT EXISTS check)
+- Cross-sectional strategy configurations are stored in the `trading_config` JSON field, so no additional columns are needed
+- The `last_rebalance_at` field is used to track when the last rebalancing occurred for cross-sectional strategies
+- If you don't run this migration, cross-sectional strategies will still work, but rebalancing frequency checks may not function correctly
+
+---
+
 ## V2.1.2 (2026-02-01)
 
 ### 🚀 New Features

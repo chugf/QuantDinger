@@ -47,11 +47,51 @@ class BinanceFuturesClient(BaseRestClient):
             return Decimal("0")
 
     @staticmethod
-    def _dec_str(d: Decimal) -> str:
+    def _dec_str(d: Decimal, max_decimals: int = 18) -> str:
+        """
+        Convert Decimal to string with controlled precision.
+        Binance requires quantities/prices to match LOT_SIZE/PRICE_FILTER precision.
+        This method ensures the output string doesn't exceed the required precision.
+        """
         try:
-            return format(d, "f")
+            if d == 0:
+                return "0"
+            # Normalize to remove unnecessary trailing zeros from internal representation
+            normalized = d.normalize()
+            # Convert to string using fixed-point notation
+            # Use a reasonable max_decimals to avoid excessive precision
+            # Binance typically uses 8 decimal places for most symbols
+            s = format(normalized, f".{max_decimals}f")
+            # Remove trailing zeros and decimal point if not needed
+            # This ensures we don't send "0.02874400" when "0.028744" is sufficient
+            if '.' in s:
+                s = s.rstrip('0').rstrip('.')
+            return s if s else "0"
         except Exception:
-            return str(d)
+            # Fallback: try to convert safely
+            try:
+                # If Decimal conversion fails, try float with limited precision
+                f = float(d)
+                if f == 0:
+                    return "0"
+                # Format with max_decimals and remove trailing zeros
+                s = format(f, f".{max_decimals}f")
+                if '.' in s:
+                    s = s.rstrip('0').rstrip('.')
+                return s if s else "0"
+            except Exception:
+                # Last resort: convert to string
+                s = str(d)
+                # Try to remove scientific notation if present
+                if 'e' in s.lower() or 'E' in s:
+                    try:
+                        f = float(s)
+                        s = format(f, f".{max_decimals}f")
+                        if '.' in s:
+                            s = s.rstrip('0').rstrip('.')
+                    except Exception:
+                        pass
+                return s if s else "0"
 
     @staticmethod
     def _floor_to_step(value: Decimal, step: Decimal) -> Decimal:
@@ -237,12 +277,34 @@ class BinanceFuturesClient(BaseRestClient):
 
         if step > 0:
             q = self._floor_to_step(q, step)
+        
         # Enforce quantity precision cap (Binance may reject quantities with too many decimals: -1111).
+        # First try to get precision from metadata
+        qty_precision = None
         try:
             meta = fdict.get("_meta") or {}
-            q = self._floor_to_precision(q, (meta.get("quantityPrecision") if isinstance(meta, dict) else None))
+            if isinstance(meta, dict):
+                qty_precision = meta.get("quantityPrecision")
         except Exception:
             pass
+        
+        # If precision not available, infer from stepSize
+        if qty_precision is None and step > 0:
+            try:
+                # stepSize like "0.001" means 3 decimal places
+                step_str = str(step).rstrip('0')
+                if '.' in step_str:
+                    qty_precision = len(step_str.split('.')[1])
+                else:
+                    # If stepSize is 1 or larger, precision is 0
+                    qty_precision = 0
+            except Exception:
+                pass
+        
+        # Apply precision limit
+        if qty_precision is not None:
+            q = self._floor_to_precision(q, qty_precision)
+        
         if min_qty > 0 and q < min_qty:
             return Decimal("0")
         return q

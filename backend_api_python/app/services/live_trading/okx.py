@@ -52,14 +52,41 @@ class OkxClient(BaseRestClient):
         self._lev_cache_ttl_sec = 60.0
 
     @staticmethod
-    def _dec_str(d: Decimal) -> str:
+    def _dec_str(d: Decimal, max_decimals: int = 18) -> str:
         """
-        Convert Decimal to a non-scientific string (OKX expects plain decimal strings).
+        Convert Decimal to a non-scientific string with controlled precision.
+        OKX expects plain decimal strings matching lotSz precision.
         """
         try:
-            return format(d, "f")
+            if d == 0:
+                return "0"
+            # Normalize to remove unnecessary trailing zeros
+            normalized = d.normalize()
+            # Format with max_decimals and remove trailing zeros
+            s = format(normalized, f".{max_decimals}f")
+            if '.' in s:
+                s = s.rstrip('0').rstrip('.')
+            return s if s else "0"
         except Exception:
-            return str(d)
+            try:
+                f = float(d)
+                if f == 0:
+                    return "0"
+                s = format(f, f".{max_decimals}f")
+                if '.' in s:
+                    s = s.rstrip('0').rstrip('.')
+                return s if s else "0"
+            except Exception:
+                s = str(d)
+                if 'e' in s.lower() or 'E' in s:
+                    try:
+                        f = float(s)
+                        s = format(f, f".{max_decimals}f")
+                        if '.' in s:
+                            s = s.rstrip('0').rstrip('.')
+                    except Exception:
+                        pass
+                return s if s else "0"
 
     @staticmethod
     def _to_dec(x: Any) -> Decimal:

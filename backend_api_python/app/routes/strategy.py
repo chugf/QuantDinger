@@ -427,6 +427,11 @@ def get_positions():
                 pct = _calc_pnl_percent(entry, size, pnl)
 
                 rr = dict(r)
+                # 确保 entry_price 有值（如果数据库中是 NULL，使用计算出的 entry 值）
+                if not rr.get("entry_price") or float(rr.get("entry_price") or 0.0) <= 0:
+                    rr["entry_price"] = float(entry or 0.0)
+                else:
+                    rr["entry_price"] = float(rr.get("entry_price") or 0.0)
                 rr["current_price"] = float(cp or 0.0)
                 rr["unrealized_pnl"] = float(pnl)
                 rr["pnl_percent"] = float(pct)

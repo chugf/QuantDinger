@@ -467,7 +467,103 @@
                     :placeholder="$t('trading-assistant.placeholders.inputStrategyName')" />
                 </a-form-item>
 
+                <!-- 策略类型选择 -->
+                <a-form-item :label="$t('trading-assistant.form.strategyType')">
+                  <a-radio-group
+                    v-decorator="['cs_strategy_type', { initialValue: 'single' }]"
+                    @change="handleStrategyTypeChange">
+                    <a-radio value="single">{{ $t('trading-assistant.form.strategyTypeSingle') }}</a-radio>
+                    <a-radio value="cross_sectional">{{ $t('trading-assistant.form.strategyTypeCrossSectional') }}</a-radio>
+                  </a-radio-group>
+                  <div class="form-item-hint">
+                    {{ $t('trading-assistant.form.strategyTypeHint') }}
+                  </div>
+                </a-form-item>
+
+                <!-- 截面策略配置 -->
+                <template v-if="form.getFieldValue('cs_strategy_type') === 'cross_sectional'">
+                  <a-form-item :label="$t('trading-assistant.form.symbolList')">
+                    <a-select
+                      v-model="crossSectionalSymbols"
+                      mode="multiple"
+                      :placeholder="$t('trading-assistant.placeholders.selectSymbols')"
+                      show-search
+                      :filter-option="filterWatchlistOptionWithAdd"
+                      :loading="loadingWatchlist"
+                      @change="handleCrossSectionalSymbolChange"
+                      :getPopupContainer="(triggerNode) => triggerNode.parentNode"
+                      :maxTagCount="5">
+                      <a-select-option
+                        v-for="item in watchlist"
+                        :key="`${item.market}:${item.symbol}`"
+                        :value="`${item.market}:${item.symbol}`">
+                        <div class="symbol-option">
+                          <a-tag :color="getMarketColor(item.market)" style="margin-right: 8px; margin-bottom: 0;">
+                            {{ item.market }}
+                          </a-tag>
+                          <span class="symbol-name">{{ item.symbol }}</span>
+                          <span v-if="item.name" class="symbol-name-extra">{{ item.name }}</span>
+                        </div>
+                      </a-select-option>
+                      <a-select-option key="__add_symbol_option__" value="__add_symbol_option__" class="add-symbol-option">
+                        <div style="width: 100%; text-align: center; padding: 4px 0; color: #1890ff; cursor: pointer;">
+                          <a-icon type="plus" style="margin-right: 4px;" />
+                          <span>{{ $t('trading-assistant.form.addSymbol') }}</span>
+                        </div>
+                      </a-select-option>
+                    </a-select>
+                    <div class="form-item-hint">
+                      {{ $t('trading-assistant.form.symbolListHint') }}
+                    </div>
+                  </a-form-item>
+
+                  <a-row :gutter="16">
+                    <a-col :xs="24" :sm="12">
+                      <a-form-item :label="$t('trading-assistant.form.portfolioSize')">
+                        <a-input-number
+                          v-decorator="['portfolio_size', { initialValue: 10, rules: [{ required: true, message: $t('trading-assistant.validation.portfolioSizeRequired') }] }]"
+                          :min="1"
+                          :max="100"
+                          :step="1"
+                          style="width: 100%" />
+                        <div class="form-item-hint">
+                          {{ $t('trading-assistant.form.portfolioSizeHint') }}
+                        </div>
+                      </a-form-item>
+                    </a-col>
+                    <a-col :xs="24" :sm="12">
+                      <a-form-item :label="$t('trading-assistant.form.longRatio')">
+                        <a-input-number
+                          v-decorator="['long_ratio', { initialValue: 0.5, rules: [{ required: true, message: $t('trading-assistant.validation.longRatioRequired') }] }]"
+                          :min="0"
+                          :max="1"
+                          :step="0.1"
+                          :precision="2"
+                          style="width: 100%" />
+                        <div class="form-item-hint">
+                          {{ $t('trading-assistant.form.longRatioHint') }}
+                        </div>
+                      </a-form-item>
+                    </a-col>
+                  </a-row>
+
+                  <a-form-item :label="$t('trading-assistant.form.rebalanceFrequency')">
+                    <a-select
+                      v-decorator="['rebalance_frequency', { initialValue: 'daily' }]"
+                      style="width: 100%">
+                      <a-select-option value="daily">{{ $t('trading-assistant.form.rebalanceDaily') }}</a-select-option>
+                      <a-select-option value="weekly">{{ $t('trading-assistant.form.rebalanceWeekly') }}</a-select-option>
+                      <a-select-option value="monthly">{{ $t('trading-assistant.form.rebalanceMonthly') }}</a-select-option>
+                    </a-select>
+                    <div class="form-item-hint">
+                      {{ $t('trading-assistant.form.rebalanceFrequencyHint') }}
+                    </div>
+                  </a-form-item>
+                </template>
+
+                <!-- 单标的策略：原有的标的选择 -->
                 <a-form-item
+                  v-if="form.getFieldValue('cs_strategy_type') !== 'cross_sectional'"
                   :label="isEditMode ? $t('trading-assistant.form.symbol') : $t('trading-assistant.form.symbols')">
                   <!-- 编辑模式：单选 -->
                   <a-select
@@ -1378,7 +1474,7 @@
 </template>
 
 <script>
-import { getStrategyList, startStrategy, stopStrategy, deleteStrategy, updateStrategy, testExchangeConnection, getStrategyEquityCurve, batchCreateStrategies, batchStartStrategies, batchStopStrategies, batchDeleteStrategies } from '@/api/strategy'
+import { getStrategyList, startStrategy, stopStrategy, deleteStrategy, updateStrategy, createStrategy, testExchangeConnection, getStrategyEquityCurve, batchCreateStrategies, batchStartStrategies, batchStopStrategies, batchDeleteStrategies } from '@/api/strategy'
 import { getWatchlist, addWatchlist, searchSymbols, getHotSymbols } from '@/api/market'
 import { listExchangeCredentials, getExchangeCredential, createExchangeCredential } from '@/api/credentials'
 import { getNotificationSettings } from '@/api/user'
@@ -1785,6 +1881,8 @@ export default {
       suppressApiClearOnce: false,
       // 多币种选择（创建模式）
       selectedSymbols: [],
+      // 截面策略标的列表
+      crossSectionalSymbols: [],
       // 策略组折叠状态
       collapsedGroups: {},
       // 分组模式: 'strategy' 或 'symbol'
@@ -2089,6 +2187,36 @@ export default {
         return
       }
       this.handleMultiSymbolChange(vals)
+    },
+    handleStrategyTypeChange (e) {
+      const strategyType = e.target.value
+      // 当切换到单标的策略时，清空截面策略的标的列表
+      if (strategyType === 'single') {
+        this.crossSectionalSymbols = []
+      }
+    },
+    handleCrossSectionalSymbolChange (vals) {
+      // 检查是否点击了"添加"选项
+      if (vals && vals.includes('__add_symbol_option__')) {
+        // 从选中列表中移除特殊选项
+        this.crossSectionalSymbols = vals.filter(v => v !== '__add_symbol_option__')
+        // 打开添加弹窗
+        this.showAddSymbolModal = true
+        // 加载热门标的
+        this.loadHotSymbols(this.addSymbolMarket)
+        return
+      }
+      this.crossSectionalSymbols = vals || []
+
+      // 更新市场类型基于选中的标的
+      if (vals && vals.length > 0) {
+        const firstVal = vals[0]
+        if (typeof firstVal === 'string' && firstVal.includes(':')) {
+          const idx = firstVal.indexOf(':')
+          const market = firstVal.slice(0, idx)
+          this.selectedMarketCategory = market || 'Crypto'
+        }
+      }
     },
     getMarketColor (market) {
       const colors = {
@@ -2584,6 +2712,38 @@ export default {
         const trailingObj = (tc.trailing && typeof tc.trailing === 'object') ? tc.trailing : null
         const scaleObj = (tc.scale && typeof tc.scale === 'object') ? tc.scale : null
         const posObj = (tc.position && typeof tc.position === 'object') ? tc.position : null
+
+        // 加载截面策略配置
+        const strategyType = tc.strategy_type || strategy.strategy_type || 'single'
+        if (strategyType === 'cross_sectional') {
+          this.form.setFieldsValue({
+            cs_strategy_type: 'cross_sectional',
+            portfolio_size: tc.portfolio_size || 10,
+            long_ratio: tc.long_ratio || 0.5,
+            rebalance_frequency: tc.rebalance_frequency || 'daily'
+          })
+          // 加载标的列表
+          if (tc.symbol_list && Array.isArray(tc.symbol_list)) {
+            this.crossSectionalSymbols = tc.symbol_list
+          } else if (strategy.symbol_list) {
+            // 如果trading_config中没有，尝试从主表字段读取
+            try {
+              const symbolList = typeof strategy.symbol_list === 'string' ? JSON.parse(strategy.symbol_list) : strategy.symbol_list
+              if (Array.isArray(symbolList)) {
+                this.crossSectionalSymbols = symbolList
+              }
+            } catch (e) {
+              this.crossSectionalSymbols = []
+            }
+          } else {
+            this.crossSectionalSymbols = []
+          }
+        } else {
+          this.form.setFieldsValue({
+            cs_strategy_type: 'single'
+          })
+          this.crossSectionalSymbols = []
+        }
 
         // Backward compatible: nested configs from indicator-analysis backtest modal
         const trendAddObj = scaleObj && scaleObj.trendAdd ? scaleObj.trendAdd : null
@@ -3437,9 +3597,19 @@ export default {
 
           // 创建模式：验证多币种选择
           if (!this.isEditMode) {
-            if (!this.selectedSymbols || this.selectedSymbols.length === 0) {
-              this.$message.warning(this.$t('trading-assistant.validation.symbolsRequired'))
-              return
+            const strategyType = this.form.getFieldValue('cs_strategy_type') || 'single'
+            if (strategyType === 'cross_sectional') {
+              // 截面策略：验证截面策略标的列表
+              if (!this.crossSectionalSymbols || this.crossSectionalSymbols.length === 0) {
+                this.$message.warning(this.$t('trading-assistant.validation.symbolsRequired'))
+                return
+              }
+            } else {
+              // 单标的策略：验证多币种选择
+              if (!this.selectedSymbols || this.selectedSymbols.length === 0) {
+                this.$message.warning(this.$t('trading-assistant.validation.symbolsRequired'))
+                return
+              }
             }
           }
 
@@ -3620,7 +3790,13 @@ export default {
                 // AI智能决策过滤
                 enable_ai_filter: enableAiFilter,
                 // 指标参数（外部传递）
-                indicator_params: this.indicatorParamValues
+                indicator_params: this.indicatorParamValues,
+                // 截面策略配置
+                strategy_type: values.cs_strategy_type || 'single',
+                symbol_list: values.cs_strategy_type === 'cross_sectional' ? this.crossSectionalSymbols : undefined,
+                portfolio_size: values.cs_strategy_type === 'cross_sectional' ? (values.portfolio_size || 10) : undefined,
+                long_ratio: values.cs_strategy_type === 'cross_sectional' ? (values.long_ratio || 0.5) : undefined,
+                rebalance_frequency: values.cs_strategy_type === 'cross_sectional' ? (values.rebalance_frequency || 'daily') : undefined
               }
             }
 
@@ -3636,19 +3812,35 @@ export default {
               basePayload.trading_config.symbol = parsedSymbol
               res = await updateStrategy(this.editingStrategy.id, basePayload)
             } else {
-              // 创建模式：批量创建策略
+              // 创建模式：批量创建策略或截面策略
               basePayload.user_id = 1
               basePayload.strategy_type = 'IndicatorStrategy'
-              basePayload.symbols = this.selectedSymbols // 多币种数组
 
-              res = await batchCreateStrategies(basePayload)
+              // 如果是截面策略，只创建一个策略（使用 createStrategy）
+              if (values.cs_strategy_type === 'cross_sectional') {
+                // 截面策略：只创建一个策略，标的列表存储在 trading_config 中
+                basePayload.strategy_type = 'IndicatorStrategy' // 保持为 IndicatorStrategy，截面类型在 trading_config 中
+                // 截面策略不需要设置 symbol，因为它是多标的的
+                basePayload.trading_config.symbol = null
+                // 使用 createStrategy 创建单个策略
+                res = await createStrategy(basePayload)
+              } else {
+                // 单标的策略：批量创建多个策略（每个标的一个策略）
+                basePayload.symbols = this.selectedSymbols // 多币种数组
+                res = await batchCreateStrategies(basePayload)
+              }
             }
 
             if (res.code === 1) {
               if (this.isEditMode) {
                 this.$message.success(this.$t('trading-assistant.messages.updateSuccess'))
               } else {
-                const totalCreated = res.data?.total_created || this.selectedSymbols.length
+                // 根据策略类型计算创建的策略数量
+                const strategyType = values.cs_strategy_type || 'single'
+                const symbolCount = strategyType === 'cross_sectional'
+                  ? this.crossSectionalSymbols.length
+                  : this.selectedSymbols.length
+                const totalCreated = res.data?.total_created || symbolCount
                 this.$message.success(this.$t('trading-assistant.messages.batchCreateSuccess', { count: totalCreated }))
               }
               // Save credential to vault (crypto exchanges only, IBKR/MT5 don't need this)

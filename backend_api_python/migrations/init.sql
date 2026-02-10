@@ -162,6 +162,18 @@ CREATE INDEX IF NOT EXISTS idx_strategies_user_id ON qd_strategies_trading(user_
 CREATE INDEX IF NOT EXISTS idx_strategies_status ON qd_strategies_trading(status);
 CREATE INDEX IF NOT EXISTS idx_strategies_group_id ON qd_strategies_trading(strategy_group_id);
 
+-- Add last_rebalance_at column for cross-sectional strategies (if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'qd_strategies_trading' AND column_name = 'last_rebalance_at'
+    ) THEN
+        ALTER TABLE qd_strategies_trading ADD COLUMN last_rebalance_at TIMESTAMP;
+        RAISE NOTICE 'Added last_rebalance_at column to qd_strategies_trading';
+    END IF;
+END $$;
+
 -- =============================================================================
 -- 3. Strategy Positions
 -- =============================================================================
